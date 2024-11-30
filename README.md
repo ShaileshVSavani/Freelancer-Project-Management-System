@@ -43,7 +43,7 @@ This project is a **Project Management System** that allows users to manage proj
 ### Steps
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/project-management-system.git
+   git clone https://github.com/ShaileshVSavani/Freelancer-Project-Management-System.git
    ```
 2. Navigate to the project directory:
    ```bash
