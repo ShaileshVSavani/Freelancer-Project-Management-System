@@ -1,100 +1,97 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useContext, useState } from "react";
+import { ProjectPaymentsContext } from "../../context/ProjectPaymentsContext";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const Payments = () => {
-  const [payments, setPayments] = useState([]);
-  const [projects, setProjects] = useState([]);
+  const { projects, payments, addPayment, updatePaymentStatus } =
+    useContext(ProjectPaymentsContext);
+
   const [newPayment, setNewPayment] = useState({
     projectId: "",
     amount: "",
     status: "Unpaid",
   });
 
-  useEffect(() => {
-    // Load projects and payments from localStorage on component mount
-    const storedProjects = JSON.parse(localStorage.getItem("projects")) || [];
-    setProjects(storedProjects);
-
-    const storedPayments = JSON.parse(localStorage.getItem("payments")) || [];
-    setPayments(storedPayments);
-  }, []);
-
+  // Handle form input change
   const handlePaymentChange = (e) => {
     const { name, value } = e.target;
-    setNewPayment((prevState) => ({ ...prevState, [name]: value }));
+    setNewPayment((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Handle payment submission
   const handleAddPayment = (e) => {
     e.preventDefault();
 
-    // Check if all fields are filled out
-    if (!newPayment.projectId || !newPayment.amount || !newPayment.status) {
+    if (!newPayment.projectId || !newPayment.amount) {
       toast.error("All fields are required!");
       return;
     }
 
-    // Ensure that the amount is a positive number
-    if (parseFloat(newPayment.amount) <= 0) {
-      toast.error("Amount must be a positive number.");
+    const amount = parseFloat(newPayment.amount);
+    if (amount <= 0) {
+      toast.error("Amount must be greater than zero!");
       return;
     }
 
     // Check if a payment already exists for the selected project
-    const existingPayment = payments.find(
+    const existingPayment = payments.some(
       (payment) => payment.projectId === newPayment.projectId
     );
 
     if (existingPayment) {
-      // If a payment already exists for this project, show a warning
-      toast.warning("A payment has already been added for this project.");
+      toast.error("Payment already exists for this project!");
       return;
     }
 
-    // Create a new payment entry
     const newPaymentEntry = {
-      id: Date.now(), // Ensure unique ID for each payment entry
+      id: Date.now(),
       projectId: newPayment.projectId,
-      amount: parseFloat(newPayment.amount),
+      amount,
       status: newPayment.status,
     };
 
-    // Add the new payment to the list
-    const updatedPayments = [...payments, newPaymentEntry];
-    setPayments(updatedPayments);
-    localStorage.setItem("payments", JSON.stringify(updatedPayments));
-
-    // Show a success notification
+    addPayment(newPaymentEntry); // Update context and localStorage
     toast.success("Payment added successfully!");
-
-    // Clear the form after submission
-    setNewPayment({
-      projectId: "",
-      amount: "",
-      status: "Unpaid",
-    });
+    setNewPayment({ projectId: "", amount: "", status: "Unpaid" });
   };
 
+  // Handle marking payment as "Paid"
   const handleMarkAsPaid = (paymentId) => {
-    const updatedPayments = payments.map((payment) =>
-      payment.id === paymentId ? { ...payment, status: "Paid" } : payment
-    );
-
-    setPayments(updatedPayments);
-    localStorage.setItem("payments", JSON.stringify(updatedPayments));
-
-    // Show success notification
+    updatePaymentStatus(paymentId, "Paid");
     toast.success("Payment marked as paid!");
   };
+
+  // Filter payments based on valid projects (excluding deleted projects)
+  const validPayments = payments.filter((payment) =>
+    projects.some((project) => String(project.id) === String(payment.projectId))
+  );
+
+  // Calculate Total Earnings and Paid Earnings based on valid payments
+  const totalEarnings = validPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const paidEarnings = validPayments
+    .filter((payment) => payment.status === "Paid")
+    .reduce((sum, payment) => sum + payment.amount, 0);
 
   return (
     <div className="mt-24 max-w-7xl mx-auto p-6 bg-gradient-to-r from-[#003366] via-[#00A9E0] to-[#003366] text-white rounded-lg shadow-md">
       <h2 className="text-3xl font-semibold mb-6 text-center">Payments Management</h2>
 
-      {/* Flex container for the form and the project list */}
+      {/* Earnings Summary */}
+      <div className="mb-6 flex justify-around bg-white text-gray-800 p-4 rounded-lg shadow-md">
+        <div>
+          <h3 className="text-lg font-semibold">Total Earnings</h3>
+          <p className="text-xl font-bold">Rs. {totalEarnings.toFixed(2)}</p>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold">Paid Earnings</h3>
+          <p className="text-xl font-bold">Rs. {paidEarnings.toFixed(2)}</p>
+        </div>
+      </div>
+
+      {/* Add Payment Form */}
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Payment Form Section */}
         <div className="flex-1 bg-white p-6 rounded-lg shadow-md text-gray-800">
           <h3 className="text-xl font-semibold mb-4 text-center">Add Payment</h3>
           <form onSubmit={handleAddPayment} className="space-y-6">
@@ -149,7 +146,6 @@ const Payments = () => {
               </select>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               className="w-full bg-indigo-600 text-white py-3 rounded-md shadow-md hover:bg-indigo-700 transition duration-300"
@@ -159,20 +155,14 @@ const Payments = () => {
           </form>
         </div>
 
-        {/* Payments List Section */}
+        {/* Payments List */}
         <div className="flex-1 bg-white p-6 rounded-lg shadow-md text-gray-800">
           <h3 className="text-xl font-semibold mb-4 text-center">Payments List</h3>
-          {payments.length > 0 ? (
+          {validPayments.length ? (
             <ul className="space-y-4">
-              {payments.map((payment) => {
-                // Ensure both IDs are treated as numbers and avoid showing payments with non-existing projects
-                const project = projects.find(
-                  (p) => Number(p.id) === Number(payment.projectId)
-                );
-
-                if (!project) {
-                  return null; // Skip displaying this payment if project is deleted or not found
-                }
+              {validPayments.map((payment) => {
+                const project = projects.find((p) => String(p.id) === String(payment.projectId));
+                if (!project) return null;
 
                 return (
                   <li
@@ -185,11 +175,7 @@ const Payments = () => {
                       <p>Status: {payment.status}</p>
                     </div>
                     <button
-                      className={`py-2 px-4 rounded-md ${
-                        payment.status === "Paid"
-                          ? "bg-green-500 cursor-not-allowed"
-                          : "bg-indigo-600 hover:bg-indigo-700"
-                      } text-white`}
+                      className={`py-2 px-4 rounded-md ${payment.status === "Paid" ? "bg-green-500 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"} text-white`}
                       onClick={() => handleMarkAsPaid(payment.id)}
                       disabled={payment.status === "Paid"}
                     >
@@ -200,12 +186,11 @@ const Payments = () => {
               })}
             </ul>
           ) : (
-            <p className="text-center text-gray-600">No payments to display.</p>
+            <p className="text-center text-gray-600">No payments available.</p>
           )}
         </div>
       </div>
 
-      {/* Toast Container to display notifications */}
       <ToastContainer />
     </div>
   );
